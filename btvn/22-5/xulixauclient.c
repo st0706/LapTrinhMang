@@ -41,7 +41,6 @@ int main()
         if (FD_ISSET(STDIN_FILENO, &fdread))
         {
             fgets(buf, sizeof(buf), stdin);
-            buf[strcspn(buf, "\n")] = '\0';
             send(client, buf, strlen(buf), 0);
         }
 
