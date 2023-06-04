@@ -127,15 +127,19 @@ int main()
                     continue;
                 }
                 buf[ret] = 0;
-                if (strcmp(buf, "exit") || strcmp(buf, "Exit"))
+                if (strcmp(buf, "exit\n") == 0)
                 {
-                    send(clients[i], "Tạm biệt", strlen("Tạm biệt"), 0);
+                    send(clients[i], "Tạm biệt\n", strlen("Tạm biệt\n"), 0);
                     close(clients[i]);
+                    clients[i] = 0;
                 }
-                char editmsg[1024];
-                sanitize_input(buf);
-                strcpy(editmsg, buf);
-                send(clients[i], editmsg, strlen(editmsg), 0);
+                else
+                {
+                    char editmsg[1024];
+                    sanitize_input(buf);
+                    strcpy(editmsg, buf);
+                    send(clients[i], editmsg, strlen(editmsg), 0);
+                }
             }
         }
     }
