@@ -127,10 +127,9 @@ int main()
                     continue;
                 }
                 buf[ret] = 0;
-                if (strcmp(buf, "exit\n") == 0)
+                if (strncmp(buf, "exit", strlen("exit")) == 0)
                 {
                     send(clients[i], "Tạm biệt\n", strlen("Tạm biệt\n"), 0);
-                    close(clients[i]);
                     clients[i] = 0;
                 }
                 else

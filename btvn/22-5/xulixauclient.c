@@ -42,6 +42,11 @@ int main()
         {
             fgets(buf, sizeof(buf), stdin);
             send(client, buf, strlen(buf), 0);
+            if (strncmp(buf, "exit", 4) == 0)
+            {
+                printf("Tạm biệt bạn!\n");
+                return 0;
+            }
         }
 
         // Kiểm tra sự kiện có dữ liệu từ socket
