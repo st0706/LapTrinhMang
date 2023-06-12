@@ -6,97 +6,13 @@
 #include <netdb.h>
 #include <arpa/inet.h>
 #include <string.h>
-#include <sys/select.h>
 #include <pthread.h>
+#include <stdbool.h>
+#include <time.h>
 
-#define MAX_CLIENTS 64
-#define BUFFER_SIZE 256
-
-int clients[MAX_CLIENTS];
-char nameClients[MAX_CLIENTS][50];
-int num_clients = 0;
-
-void *handle_client(void *arg)
-{
-    int client = *(int *)arg;
-    char buf[BUFFER_SIZE];
-
-    char request[] = "Vui lòng nhập tên của bạn (đúng định dạng client_id: name):";
-    int s = send(client, request, strlen(request), 0);
-    if (s <= 0)
-    {
-        close(client);
-        pthread_exit(NULL);
-    }
-
-    char id[20];
-    char name[20];
-    int count = 0;
-    char space = ' ';
-
-    while (1)
-    {
-        memset(buf, 0, sizeof(buf));
-        memset(id, 0, sizeof(id));
-        memset(name, 0, sizeof(name));
-        int rcv = recv(client, buf, sizeof(buf), 0);
-        if (rcv <= 0)
-        {
-            break;
-        }
-
-        if (strchr(buf, ':') == NULL)
-            continue;
-
-        char *token = strtok(buf, ":");
-        strcpy(id, token);
-        token = strtok(NULL, ":");
-        token[strlen(token) - 1] = 0;
-        strcpy(name, token);
-        for (int i = 1; i < strlen(name); i++)
-        {
-            if (name[i] == space)
-            {
-                count++;
-            }
-        }
-
-        if (strcmp(id, "client_id") == 0 && strlen(name) >= 3 && count < 1)
-        {
-            break;
-        }
-    }
-
-    strcpy(nameClients[num_clients++], name);
-    printf("%s đã kết nối tới Server chat.\n", nameClients[num_clients - 1]);
-
-    while (1)
-    {
-        memset(buf, 0, sizeof(buf));
-        int ret = recv(client, buf, sizeof(buf), 0);
-        if (ret <= 0)
-        {
-            // Client đã ngắt kết nối
-            break;
-        }
-        buf[ret] = 0;
-
-        char full_msg[500];
-        int msg_len = snprintf(full_msg, sizeof(full_msg), "%s:%s", name, buf);
-        full_msg[strlen(full_msg) - 1] = 0;
-
-        for (int i = 0; i < num_clients; i++)
-        {
-            if (clients[i] != client)
-            {
-                send(clients[i], full_msg, strlen(full_msg), 0);
-            }
-        }
-    }
-
-    close(client);
-    pthread_exit(NULL);
-}
+void *client_thread(void *);
+int num_users = 0;
+int users[64];
 
 int main()
 {
@@ -131,28 +47,90 @@ int main()
         {
             perror("accept() failed");
             continue;
+            ;
         }
+        printf("New client connected: %d\n", client);
 
-        if (num_clients >= MAX_CLIENTS)
-        {
-            printf("Số lượng kết nối đã đạt tối đa. Từ chối kết nối mới.\n");
-            close(client);
-            continue;
-        }
-
-        clients[num_clients] = client;
-
-        pthread_t thread;
-        if (pthread_create(&thread, NULL, handle_client, &client) != 0)
-        {
-            perror("pthread_create() failed");
-            close(client);
-            continue;
-        }
-
-        pthread_detach(thread);
+        pthread_t thread_id;
+        pthread_create(&thread_id, NULL, client_thread, &client);
+        pthread_detach(thread_id);
     }
 
     close(listener);
+
     return 0;
+}
+
+void *client_thread(void *param)
+{
+    char buf[1024], id[20], name[20];
+    int client = *(int *)param;
+    int s = send(client, "Vui lòng nhập tên của bạn (đúng định dạng client_id:name):", strlen("Vui lòng nhập tên của bạn (đúng định dạng client_id:name):"), 0);
+    if (s <= 0)
+    {
+        close(client);
+        pthread_exit(NULL);
+    }
+    bool visited = false;
+    while (1)
+    {
+        int ret = recv(client, buf, sizeof(buf), 0);
+        if (ret <= 0)
+            break;
+
+        buf[ret] = 0;
+        if (!visited)
+        {
+            if (strchr(buf, ':') == NULL)
+            {
+                send(client, "Vui lòng nhập tên của bạn (đúng định dạng client_id:name):", strlen("Vui lòng nhập tên của bạn (đúng định dạng client_id:name):"), 0);
+            }
+            else
+            {
+                char *token = strtok(buf, ":");
+                strcpy(id, token);
+                token = strtok(NULL, ":");
+                token[strlen(token) - 1] = 0;
+                strcpy(name, token);
+                if (strcmp(id, "client_id") != 0 || strlen(name) < 3)
+                {
+                    send(client, "Vui lòng nhập tên của bạn (đúng định dạng client_id:name):", strlen("Vui lòng nhập tên của bạn (đúng định dạng client_id:name):"), 0);
+                }
+                else
+                {
+                    printf("%s đã kết nối tới Server chat.\n", name);
+                    visited = true;
+                    users[num_users++] = client;
+                }
+            }
+        }
+        else
+        {
+            // memset(buf, 0, sizeof(buf));
+            // int ret = recv(client, buf, sizeof(buf), 0);
+            // if (ret <= 0)
+            // {
+            //     // Client đã ngắt kết nối
+            //     break;
+            // }
+            buf[ret] = 0;
+            time_t now = time(NULL);
+            struct tm *tm_info = localtime(&now);
+            char time_str[50];
+            strftime(time_str, 50, "%Y/%m/%d %I:%M:%S%p", tm_info);
+            char full_msg[500];
+            int msg_len = snprintf(full_msg, sizeof(full_msg), "%s %s:%s", time_str, name, buf);
+            full_msg[strlen(full_msg) - 1] = 0;
+            for (int i = 0; i < num_users; i++)
+            {
+                if (users[i] != client)
+                {
+                    send(users[i], full_msg, strlen(full_msg), 0);
+                }
+            }
+            visited = true;
+        }
+    }
+
+    close(client);
 }
